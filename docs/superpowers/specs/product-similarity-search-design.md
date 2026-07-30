@@ -1,6 +1,5 @@
 # Product Similarity Search — Design Spec
 
-**Date:** 2026-07-30
 **Exercise:** SAP CXII Technical Exercise (`sap-cxii-tech-ex-01`)
 **Dataset:** Amazon Fashion products 2020 (`data/…_30k_data.ldjson`, 30,000 records)
 
