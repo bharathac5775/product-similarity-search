@@ -376,7 +376,39 @@ docker run --rm -p 8000:8000 product-similarity:latest
 curl "localhost:8000/health"
 ```
 
+#### The image, stage by stage
+
+The `Dockerfile` is a **two-stage build** — the whole point is that the tools used to
+*build* the image never ship in the image that *runs*:
+
+**Stage 1 — `builder`** (`python:3.10-slim`)
+- Creates an isolated virtualenv at `/opt/venv` and `pip install`s `requirements.txt`
+  into it, using pip/build tooling we do **not** want in the final image.
+- `requirements.txt` is copied **before** the source, so this layer is cached and only
+  rebuilt when dependencies change — code edits don't re-run `pip install`.
+
+**Stage 2 — `runtime`** (fresh `python:3.10-slim`)
+- Starts clean and copies over **only the prebuilt `/opt/venv`** from the builder — no
+  compilers or build caches, so the image is smaller and has a smaller attack surface.
+- **Non-root by construction:** creates `appuser` (uid 10001) first, then every
+  `COPY --chown=appuser` lands with correct ownership; the container runs as `USER
+  appuser`.
+- **Layer order = least- to most-frequently-changed** for cache efficiency: venv →
+  `src/` → `templates/` → `static/` → `app.py` → **dataset last** (largest, rarely
+  changes relative to code, so it sits in its own cached layer).
+- **Dataset baked in** (`COPY data/`), so the container runs standalone with no volume
+  mounts or downloads.
+- **`HEALTHCHECK`** hits `/health` every 30s (with a 40s startup grace) so Docker/Compose
+  know when the engine has finished building its vectors and is actually ready.
+- OCI `LABEL`s add provenance (title, source repo, license).
+
+Net effect: a self-contained, hardened, cache-friendly image that starts fast in
+Kubernetes.
+
 ### Kubernetes (minikube)
+
+This deploys as a standard three-manifest bundle in `k8s/` — **ConfigMap + Deployment
++ Service** — and is written to be genuinely production-shaped, not a toy.
 
 ```bash
 minikube start
@@ -389,11 +421,33 @@ eval $(minikube docker-env -u)                # reset docker env when done
 ```
 
 Building inside minikube's daemon avoids the `:latest` image-cache trap
-(`imagePullPolicy: IfNotPresent` + tag reuse serving a stale image). The Deployment
-runs as a non-root user with a read-only root filesystem, drops all capabilities, sets
-CPU/memory requests+limits, and gates traffic on `/health` **startup, readiness, and
-liveness** probes. Runtime behaviour is driven by the ConfigMap (`k8s/configmap.yaml`),
-so you can change flags without rebuilding.
+(`imagePullPolicy: IfNotPresent` + tag reuse serving a stale image).
+
+**What makes it production-ready:**
+
+- **Config without rebuilds** — the Deployment pulls all `PSS_*` engine settings from
+  the **ConfigMap** via `envFrom` (`k8s/configmap.yaml`). Flip FAISS on, change the
+  image-sample size, or point at a different dataset by editing the ConfigMap and
+  restarting — no image rebuild.
+- **Three health probes on `/health`** — the engine builds ~30k vectors at boot (~15s,
+  more with FAISS/images), so a **startup probe** (up to 30 × 5s = 150s) gates the
+  others and prevents a slow first load from triggering a restart loop; a **readiness
+  probe** keeps traffic away until `/health` responds; a **liveness probe** restarts a
+  wedged pod afterwards.
+- **Security hardening** — runs as **non-root** (uid 10001), with a **read-only root
+  filesystem**, `allowPrivilegeEscalation: false`, **all Linux capabilities dropped**,
+  and the `RuntimeDefault` seccomp profile. A small `emptyDir` at `/tmp` gives
+  uvicorn/Python the writable scratch space they need despite the read-only root.
+- **Resource requests & limits** — sized from a measured ~1.24 GiB peak RSS
+  (TF-IDF over 30k rows): requests `500m` CPU / `1Gi`, limits `1500m` / `2Gi` (headroom
+  for FAISS), so the scheduler can place it and it can't starve the node.
+- **Stable access** — a **NodePort** Service pins the app to node port **30080** rather
+  than a random one; `port-forward` is the most reliable path in local clusters.
+
+**Scaling note:** the engine is stateless once built (all vectors held in memory,
+rebuilt identically from the baked dataset), so raising `replicas` and putting the
+Service in front is safe — each pod serves the same results independently. The FAISS
+fast path is what keeps per-request latency low as the catalogue grows toward millions.
 
 ---
 
