@@ -40,6 +40,19 @@ class SimilarityEngine:
         self._ids = list(df.index)
         self._pos = {pid: i for i, pid in enumerate(self._ids)}
 
+        # Optional FAISS HNSW fast path (Part 3). FAISS needs a dense float32
+        # matrix, so we materialise one only when the flag is enabled.
+        self._faiss = None
+        self._dense = None
+        if self.settings.use_faiss:
+            from .faiss_index import FaissHNSW
+
+            self._dense = (
+                self.matrix.toarray() if issparse(self.matrix) else np.asarray(self.matrix)
+            ).astype("float32")
+            self._faiss = FaissHNSW()
+            self._faiss.build(self._dense)
+
     def _cosine_scores(self, row_idx: int) -> np.ndarray:
         # Rows are L2-normalised, so cosine similarity == dot product.
         q = self.matrix[row_idx]
@@ -53,7 +66,6 @@ class SimilarityEngine:
             raise KeyError(product_id)
 
         i = self._pos[product_id]
-        sims = self._cosine_scores(i)
 
         s = self.settings
         base_brand = self.df.iloc[i]["brand"]
@@ -64,11 +76,27 @@ class SimilarityEngine:
         brands = self.df["brand"].to_numpy()
         colour_sets = self.df["colour_set"].to_numpy()
 
+        # Choose candidate set + per-candidate base score.
+        if self._faiss is not None:
+            # Over-fetch so self-exclusion and re-ranking still leave enough results.
+            k = min(len(self._ids), max(num_similar * 5, num_similar + 1))
+            _, idxs = self._faiss.search(self._dense[i], k)
+            neighbours = [int(j) for j in idxs if 0 <= int(j) < len(self._ids)]
+
+            def base_score(j: int) -> float:
+                return float(self._dense[i] @ self._dense[j])
+        else:
+            sims = self._cosine_scores(i)
+            neighbours = range(len(self._ids))
+
+            def base_score(j: int) -> float:
+                return float(sims[j])
+
         candidates = []
-        for j in range(len(self._ids)):
+        for j in neighbours:
             if j == i:
                 continue
-            score = float(sims[j])
+            score = base_score(j)
             if base_brand and brands[j] == base_brand:
                 score += s.w_brand
             if base_colours and colour_sets[j]:
