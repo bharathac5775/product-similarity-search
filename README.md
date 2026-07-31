@@ -18,7 +18,7 @@ offers an optional **FAISS/HNSW** fast path for large-scale search, and an optio
 3. [How we measure similarity](#3-how-we-measure-similarity)
 4. [Architecture](#4-architecture)
 5. [Fast large-scale search: FAISS / HNSW](#5-fast-large-scale-search-faiss--hnsw)
-6. [Optional: CLIP image similarity](#6-optional-clip-image-similarity)
+6. [Optional: CLIP image similarity (multimodal)](#6-optional-clip-image-similarity-multimodal)
 7. [How to run](#7-how-to-run) — local, Docker, Kubernetes
 8. [Testing](#8-testing)
 9. [Configuration](#9-configuration)
@@ -186,23 +186,35 @@ Code: `src/product_similarity/faiss_index.py`.
 
 ---
 
-## 6. Optional: CLIP image similarity
+## 6. Optional: CLIP image similarity (multimodal)
 
 Products carry image URLs. To compare *how products look*, we embed images with a
 pretrained **CLIP** model (`clip-ViT-B-32`) into 512-dim vectors — this is *transfer
 learning* (we reuse a model trained on hundreds of millions of image/text pairs; we do
-not train anything). Visually similar products get similar vectors, usable by the same
-cosine machinery.
+not train anything). Visually similar products get similar vectors.
+
+**These image vectors are fused into the main search** as a third block:
+
+```
+fused = [ numeric | text (TF-IDF) | image (CLIP) ]  → L2-normalize
+```
+
+So when enabled, `find_similar_products` ranks by appearance *and* text *and* numbers
+together, weighted by `w_image` — a genuine multimodal recommender. Toggle with
+`PSS_USE_IMAGES=true`.
 
 Practical notes:
 - **Scale-ready but sampled:** downloading + embedding all 30k images (some 2020 URLs
-  are dead) is slow and flaky, so this is intended to run on a sample; the code path is
-  identical at full scale.
+  are dead) is slow and flaky, so by default only the first `PSS_IMAGE_SAMPLE_SIZE`
+  products are embedded; the code path is identical at full scale. Products outside the
+  sample keep a zero image vector, so text/numeric signals still rank them.
 - **Graceful degradation:** an unreachable URL yields a zero vector rather than crashing.
 - **Kept out of the core image:** `torch`/CLIP are heavy (~2 GB), so they live in
-  `requirements-optional.txt` and are *not* baked into the Docker image.
+  `requirements-optional.txt` and are *not* baked into the Docker image. Install with
+  `pip install -r requirements-optional.txt` before enabling images.
 
-Code: `src/product_similarity/images.py`.
+Code: `src/product_similarity/images.py` (embedder) and the image block in
+`src/product_similarity/engine.py` (fusion).
 
 ---
 
@@ -284,10 +296,12 @@ All tunables live in `src/product_similarity/config.py` and can be overridden vi
 | `PSS_DATA_PATH` | dataset path | where the `.ldjson` lives |
 | `PSS_TEXT_BACKEND` | `tfidf` | `tfidf` or `embeddings` |
 | `PSS_USE_FAISS` | `false` | enable the FAISS HNSW fast path |
+| `PSS_USE_IMAGES` | `false` | fuse CLIP image features into the search |
+| `PSS_IMAGE_SAMPLE_SIZE` | `1000` | how many products' images to embed |
 | `PSS_TFIDF_MAX_FEATURES` | `5000` | TF-IDF vocabulary cap |
 
-Blend weights (`w_text`, `w_price`, `w_rating`, `w_weight`, `w_brand`, `w_colour`) are
-also defined there.
+Blend weights (`w_text`, `w_price`, `w_rating`, `w_weight`, `w_brand`, `w_colour`,
+`w_image`) are also defined there.
 
 ---
 
@@ -305,6 +319,7 @@ also defined there.
 | **Data-driven weights** | Trust reliable signals (name, price) over weak ones (rating, weight) |
 | **TF-IDF default + optional embeddings** | Fast, transparent baseline; semantic path available |
 | **HNSW** for ANN | No training, high recall, low latency, scales |
+| **CLIP image block, fused + sampled** | Adds visual similarity as a weighted block; sampled to stay fast and dead-URL-tolerant |
 | **Multi-stage Docker, heavy deps optional** | 9 GB → ~1.1 GB image; faster K8s pulls, smaller attack surface |
 | **Startup-time build, in-memory** | Slow work once; fast per-request lookups |
 ```
