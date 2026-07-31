@@ -166,3 +166,7 @@ cython_debug/
 # macOS
 .DS_Store
 **/.DS_Store
+
+# Personal project: internal planning docs and original brief (kept locally, not shipped)
+Task-README.md
+docs/superpowers/

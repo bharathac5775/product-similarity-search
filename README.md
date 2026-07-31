@@ -7,8 +7,7 @@ offers an optional **FAISS/HNSW** fast path for large-scale search, and an optio
 **CLIP** image-similarity phase.
 
 > This document explains not just *how* to run the project, but *why* each design
-> decision was made — since the exercise is graded on reasoning and design, not on a
-> single "correct" answer.
+> decision was made — the reasoning and trade-offs behind the approach.
 
 ---
 
@@ -18,7 +17,7 @@ offers an optional **FAISS/HNSW** fast path for large-scale search, and an optio
 2. [The data, and how we clean it](#2-the-data-and-how-we-clean-it)
 3. [How we measure similarity](#3-how-we-measure-similarity)
 4. [Architecture](#4-architecture)
-5. [Part 3: FAISS / HNSW optimization](#5-part-3-faiss--hnsw-optimization)
+5. [Fast large-scale search: FAISS / HNSW](#5-fast-large-scale-search-faiss--hnsw)
 6. [Optional: CLIP image similarity](#6-optional-clip-image-similarity)
 7. [How to run](#7-how-to-run) — local, Docker, Kubernetes
 8. [Testing](#8-testing)
@@ -112,7 +111,7 @@ path mathematically consistent.
 
 **Weights are configurable and data-driven** (`config.py`): text is the dominant
 signal; price is medium; rating and weight are low (rating is skewed; weight is 79%
-missing). This directly implements the exercise's "configurable weighting."
+missing). This makes the similarity blend fully configurable.
 
 Code: `src/product_similarity/features.py`, `src/product_similarity/engine.py`.
 
@@ -148,13 +147,13 @@ Layered, single-purpose modules:
 | `config.py` | weights, paths, feature flags |
 | `features.py` | build fused, L2-normalized vectors |
 | `engine.py` | `SimilarityEngine` + `find_similar_products` |
-| `faiss_index.py` | FAISS HNSW wrapper (Part 3) |
+| `faiss_index.py` | FAISS HNSW wrapper (fast large-scale search) |
 | `images.py` | CLIP image embeddings (optional) |
 | `app.py` | FastAPI service |
 
 ---
 
-## 5. Part 3: FAISS / HNSW optimization
+## 5. Fast large-scale search: FAISS / HNSW
 
 Exact search compares the query against all 30,000 vectors per request. That is fine
 here (~37 ms) but grows linearly and becomes too slow at millions of products. FAISS
@@ -297,7 +296,7 @@ also defined there.
 | Decision | Why |
 |---|---|
 | Unsupervised **KNN retrieval** | No similarity labels exist → regression/trees don't apply |
-| **Single fused vector** per product | Lets Part 1 (exact), Part 3 (FAISS), and images share one representation |
+| **Single fused vector** per product | Lets exact search, FAISS, and images share one representation |
 | **Cosine** on **L2-normalized** vectors | Compares *content*, not magnitude; makes exact ≡ FAISS inner-product |
 | **StandardScaler** on numerics | Prevents price from drowning out rating |
 | **log1p(price)** | Tames right-skew so outliers don't dominate |

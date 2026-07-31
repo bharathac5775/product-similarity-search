@@ -1,6 +1,6 @@
 """SimilarityEngine: build vectors once, then answer nearest-neighbour queries.
 
-This implements the exercise's core function:
+This implements the core function:
 
     find_similar_products(product_id: str, num_similar: int) -> list[str]
 
@@ -115,7 +115,7 @@ _default_engine: SimilarityEngine | None = None
 
 
 def find_similar_products(product_id: str, num_similar: int) -> list[str]:
-    """Module-level convenience matching the exercise signature.
+    """Module-level convenience matching the public function signature.
 
     Lazily builds a default engine from the configured dataset on first call.
     """
