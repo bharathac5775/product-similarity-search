@@ -1,0 +1,97 @@
+"""SimilarityEngine: build vectors once, then answer nearest-neighbour queries.
+
+This implements the exercise's core function:
+
+    find_similar_products(product_id: str, num_similar: int) -> list[str]
+
+Ranking uses cosine similarity on the L2-normalised fused vectors (so cosine ==
+dot product). On top of the base score we add small bonuses for a matching brand
+and overlapping colours, then break ties by (score, rating, -price).
+"""
+from __future__ import annotations
+
+import numpy as np
+from scipy.sparse import issparse
+
+from .config import Settings, settings as default_settings
+from .data_loader import load_products
+from .features import FeatureBuilder
+
+
+class SimilarityEngine:
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or default_settings
+        self.df = None
+        self.matrix = None
+        self._pos: dict[str, int] = {}  # uniq_id -> row index
+        self._ids: list[str] = []  # row index -> uniq_id
+        self._fb: FeatureBuilder | None = None
+
+    @classmethod
+    def from_path(cls, path: str, settings: Settings | None = None) -> "SimilarityEngine":
+        eng = cls(settings)
+        eng.build(load_products(path))
+        return eng
+
+    def build(self, df) -> None:
+        self.df = df
+        self._fb = FeatureBuilder(self.settings)
+        self.matrix = self._fb.fit_transform(df)
+        self._ids = list(df.index)
+        self._pos = {pid: i for i, pid in enumerate(self._ids)}
+
+    def _cosine_scores(self, row_idx: int) -> np.ndarray:
+        # Rows are L2-normalised, so cosine similarity == dot product.
+        q = self.matrix[row_idx]
+        scores = self.matrix @ q.T
+        return scores.toarray().ravel() if issparse(scores) else np.asarray(scores).ravel()
+
+    def find_similar_products(self, product_id: str, num_similar: int) -> list[str]:
+        if num_similar <= 0:
+            raise ValueError("num_similar must be a positive integer")
+        if product_id not in self._pos:
+            raise KeyError(product_id)
+
+        i = self._pos[product_id]
+        sims = self._cosine_scores(i)
+
+        s = self.settings
+        base_brand = self.df.iloc[i]["brand"]
+        base_colours = self.df.iloc[i]["colour_set"]
+
+        ratings = self.df["rating"].to_numpy(dtype=float)
+        prices = self.df["price"].to_numpy(dtype=float)
+        brands = self.df["brand"].to_numpy()
+        colour_sets = self.df["colour_set"].to_numpy()
+
+        candidates = []
+        for j in range(len(self._ids)):
+            if j == i:
+                continue
+            score = float(sims[j])
+            if base_brand and brands[j] == base_brand:
+                score += s.w_brand
+            if base_colours and colour_sets[j]:
+                union = base_colours | colour_sets[j]
+                if union:
+                    overlap = len(base_colours & colour_sets[j]) / len(union)
+                    score += s.w_colour * overlap
+            # Tie-break: higher score, then higher rating, then lower price.
+            candidates.append((score, ratings[j], -prices[j], self._ids[j]))
+
+        candidates.sort(reverse=True)
+        return [pid for _, _, _, pid in candidates[:num_similar]]
+
+
+_default_engine: SimilarityEngine | None = None
+
+
+def find_similar_products(product_id: str, num_similar: int) -> list[str]:
+    """Module-level convenience matching the exercise signature.
+
+    Lazily builds a default engine from the configured dataset on first call.
+    """
+    global _default_engine
+    if _default_engine is None:
+        _default_engine = SimilarityEngine.from_path(default_settings.data_path)
+    return _default_engine.find_similar_products(product_id, num_similar)
