@@ -1,0 +1,18 @@
+{% macro product_card(p) %}
+<a class="card" href="/product/{{ p.uniq_id }}">
+  <div class="card-img">
+    <img src="{{ p.image_url }}" alt="{{ p.product_name|truncate(60) }}" loading="lazy"
+         onerror="this.classList.add('img-missing');this.removeAttribute('src');">
+  </div>
+  <div class="card-body">
+    <div class="card-brand">{{ p.brand or '—' }}</div>
+    <div class="card-name">{{ p.product_name|truncate(55) }}</div>
+    <div class="card-meta">
+      <span class="price">₹{{ '%.0f'|format(p.price) }}</span>
+      {% if p.rating and p.rating > 0 %}
+      <span class="rating">{{ '%.1f'|format(p.rating) }} ★</span>
+      {% endif %}
+    </div>
+  </div>
+</a>
+{% endmacro %}

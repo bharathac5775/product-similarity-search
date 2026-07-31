@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_card.html" import product_card %}
+{% block title %}Fashion Finder — browse products{% endblock %}
+
+{% block content %}
+  <div class="results-head">
+    {% if q %}
+      <h1>Results for “{{ q }}”</h1>
+      <p class="muted">{{ total }} product{{ '' if total == 1 else 's' }} found</p>
+    {% else %}
+      <h1>Discover products</h1>
+      <p class="muted">{{ total }} products in the catalog — click any product to see similar items.</p>
+    {% endif %}
+  </div>
+
+  {% if products %}
+    <section class="grid">
+      {% for p in products %}
+        {{ product_card(p) }}
+      {% endfor %}
+    </section>
+
+    {% if total_pages > 1 %}
+    <nav class="pager" aria-label="Pagination">
+      {% if has_prev %}
+        <a class="pg-btn" href="/?q={{ q|urlencode }}&page={{ page - 1 }}">← Prev</a>
+      {% else %}
+        <span class="pg-btn disabled">← Prev</span>
+      {% endif %}
+      <span class="pg-info">Page {{ page }} of {{ total_pages }}</span>
+      {% if has_next %}
+        <a class="pg-btn" href="/?q={{ q|urlencode }}&page={{ page + 1 }}">Next →</a>
+      {% else %}
+        <span class="pg-btn disabled">Next →</span>
+      {% endif %}
+    </nav>
+    {% endif %}
+  {% else %}
+    <div class="empty">
+      <h2>No products found</h2>
+      <p class="muted">Try a different search term, or <a href="/">browse all products</a>.</p>
+    </div>
+  {% endif %}
+{% endblock %}

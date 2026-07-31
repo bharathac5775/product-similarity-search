@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% from "_card.html" import product_card %}
+{% block title %}{{ product.product_name|truncate(50) }} — Fashion Finder{% endblock %}
+
+{% block content %}
+  <nav class="crumbs"><a href="/">Home</a> <span>/</span> <span>{{ product.brand or 'Product' }}</span></nav>
+
+  <section class="detail">
+    <div class="detail-img">
+      <img src="{{ product.image_url }}" alt="{{ product.product_name }}"
+           onerror="this.classList.add('img-missing');this.removeAttribute('src');">
+    </div>
+    <div class="detail-info">
+      <div class="detail-brand">{{ product.brand or '—' }}</div>
+      <h1 class="detail-name">{{ product.product_name }}</h1>
+      <div class="detail-meta">
+        {% if product.rating and product.rating > 0 %}
+          <span class="rating big">{{ '%.1f'|format(product.rating) }} ★</span>
+        {% endif %}
+      </div>
+      <div class="detail-price">₹{{ '%.0f'|format(product.price) }}</div>
+      {% if product.colours %}
+        <div class="detail-colours">
+          <span class="label">Colours:</span>
+          {% for c in product.colours %}<span class="chip">{{ c }}</span>{% endfor %}
+        </div>
+      {% endif %}
+      <button class="buy-btn" type="button">Add to bag</button>
+    </div>
+  </section>
+
+  <section class="similar">
+    <h2>Similar products</h2>
+    <p class="muted">Recommended by the similarity engine based on name, brand, colour, price and rating.</p>
+    {% if similar %}
+      <div class="grid">
+        {% for p in similar %}{{ product_card(p) }}{% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">No similar products found.</p>
+    {% endif %}
+  </section>
+{% endblock %}

@@ -35,6 +35,39 @@ def test_gallery_returns_html(sample_ldjson_path):
     assert "QUERY" in r.text  # the query product card is rendered
 
 
+def test_home_page_lists_products(sample_ldjson_path):
+    c = _client(sample_ldjson_path)
+    r = c.get("/")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    # the storefront renders product cards linking to detail pages
+    assert "/product/p1" in r.text
+
+
+def test_home_search_narrows_results(sample_ldjson_path):
+    c = _client(sample_ldjson_path)
+    r = c.get("/", params={"q": "saree"})
+    assert r.status_code == 200
+    # a shoe (p6) should not appear when searching sarees
+    assert "/product/p1" in r.text
+    assert "/product/p6" not in r.text
+
+
+def test_product_detail_shows_similar(sample_ldjson_path):
+    c = _client(sample_ldjson_path)
+    r = c.get("/product/p1")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    assert "Similar products" in r.text
+
+
+def test_product_detail_unknown_id_404(sample_ldjson_path):
+    c = _client(sample_ldjson_path)
+    r = c.get("/product/nope")
+    assert r.status_code == 404
+    assert "text/html" in r.headers["content-type"]
+
+
 def test_find_unknown_id_404(sample_ldjson_path):
     c = _client(sample_ldjson_path)
     r = c.get("/find_similar_products", params={"product_id": "nope", "num_similar": 3})

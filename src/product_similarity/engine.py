@@ -138,6 +138,47 @@ class SimilarityEngine:
         candidates.sort(reverse=True)
         return [pid for _, _, _, pid in candidates[:num_similar]]
 
+    # ------------------------------------------------------------------
+    # Display helpers used by the storefront HTML pages (pure df lookups).
+    # ------------------------------------------------------------------
+    def _row_to_dict(self, pid: str) -> dict:
+        """Turn one product row into a display-ready dict for templates."""
+        row = self.df.loc[pid]
+        return {
+            "uniq_id": pid,
+            "product_name": row["product_name"],
+            "brand": row["brand"],
+            "price": float(row["price"]),
+            "rating": float(row["rating"]),
+            "colours": sorted(row["colour_set"]),
+            "image_url": row["image_url"],
+        }
+
+    def get_products(self, ids: list[str]) -> list[dict]:
+        """Map ids to display dicts, preserving input order and skipping unknowns."""
+        return [self._row_to_dict(pid) for pid in ids if pid in self._pos]
+
+    def search(self, query: str, page: int = 1, per_page: int = 24) -> tuple[list[dict], int]:
+        """Substring search over product_name + brand, case-insensitive, paged.
+
+        An empty/blank query returns the full catalog in its natural order.
+        Returns ``(page_rows, total_matches)`` where page is 1-based.
+        """
+        q = (query or "").strip().lower()
+        if q:
+            names = self.df["product_name"].astype(str).str.lower()
+            brands = self.df["brand"].astype(str).str.lower()
+            mask = names.str.contains(q, regex=False) | brands.str.contains(q, regex=False)
+            matched_ids = list(self.df.index[mask])
+        else:
+            matched_ids = list(self.df.index)
+
+        total = len(matched_ids)
+        page = max(1, page)
+        start = (page - 1) * per_page
+        page_ids = matched_ids[start : start + per_page]
+        return self.get_products(page_ids), total
+
 
 _default_engine: SimilarityEngine | None = None
 
