@@ -288,8 +288,8 @@ row-normalised index (`_image_vectors` in `engine.py`), queried exclusively by
   (~2 GB) and live in `requirements-optional.txt`, **not** in the Docker image. Install
   them locally before enabling images:
   `pip install -r requirements-optional.txt`.
-- **⚠️ FAISS + images together on macOS.** FAISS and torch each bundle their own
-  `libomp.dylib`; loading both in one process can segfault. If you run
+- **⚠️ FAISS + images together.** FAISS and torch each bundle their own OpenMP
+  runtime; loading both in one process can segfault. If you run
   `PSS_USE_FAISS=1 PSS_USE_IMAGES=1` locally, prefix the command with
   `OMP_NUM_THREADS=1 KMP_DUPLICATE_LIB_OK=TRUE`. (The default Kubernetes config keeps
   FAISS off, so this only affects the local combo.)
@@ -360,7 +360,7 @@ PSS_USE_FAISS=1 PYTHONPATH=src .venv/bin/uvicorn app:app --port 8000
 # CLIP photo-upload search (embeds the first 400 images at startup, ~1–2 min)
 PSS_USE_IMAGES=1 PSS_IMAGE_SAMPLE_SIZE=400 PYTHONPATH=src .venv/bin/uvicorn app:app --port 8000
 
-# both together on macOS — note the OpenMP guard (see §7)
+# both together — note the OpenMP guard (see §7)
 OMP_NUM_THREADS=1 KMP_DUPLICATE_LIB_OK=TRUE \
   PSS_USE_FAISS=1 PSS_USE_IMAGES=1 PSS_IMAGE_SAMPLE_SIZE=400 \
   PYTHONPATH=src .venv/bin/uvicorn app:app --port 8000
@@ -384,7 +384,7 @@ eval $(minikube -p minikube docker-env)      # point docker at minikube's daemon
 docker build -t product-similarity:latest .  # build the image INSIDE the cluster
 kubectl apply -f k8s/                         # ConfigMap + Deployment + Service
 kubectl rollout status deployment/product-similarity
-kubectl port-forward svc/product-similarity 8080:80   # reliable access on macOS
+kubectl port-forward svc/product-similarity 8080:80   # reliable local access
 eval $(minikube docker-env -u)                # reset docker env when done
 ```
 
