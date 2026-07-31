@@ -70,4 +70,17 @@ def test_load_products_colour_set(sample_ldjson_path):
 def test_load_products_brand_lowercase_and_missing(sample_ldjson_path):
     df = load_products(sample_ldjson_path)
     assert df.loc["p1", "brand"] == "facon"
-    assert df.loc["p6", "brand"] == ""  # missing brand
+
+
+def test_missing_brand_inferred_from_name(sample_ldjson_path):
+    df = load_products(sample_ldjson_path)
+    # p6 has no brand and name "Running Shoes Grey"; no known brand matches,
+    # so it falls back to the first word of the name.
+    assert df.loc["p6", "brand"] == "running"
+
+
+def test_missing_brand_matches_known_brand_prefix(sample_ldjson_path):
+    df = load_products(sample_ldjson_path)
+    # p9 has no brand but its name starts with "Max" (a brand seen on p4/p5),
+    # so the known-brand prefix match recovers "max" rather than a stray word.
+    assert df.loc["p9", "brand"] == "max"

@@ -11,7 +11,7 @@
            onerror="this.classList.add('img-missing');this.removeAttribute('src');">
     </div>
     <div class="detail-info">
-      <div class="detail-brand">{{ product.brand or '—' }}</div>
+      <div class="detail-brand">{% if product.brand %}{{ product.brand }}{% endif %}</div>
       <h1 class="detail-name">{{ product.product_name }}</h1>
       <div class="detail-meta">
         {% if product.rating and product.rating > 0 %}

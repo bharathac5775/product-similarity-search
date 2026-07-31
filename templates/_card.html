@@ -5,7 +5,7 @@
          onerror="this.classList.add('img-missing');this.removeAttribute('src');">
   </div>
   <div class="card-body">
-    <div class="card-brand">{{ p.brand or '—' }}</div>
+    {% if p.brand %}<div class="card-brand">{{ p.brand }}</div>{% endif %}
     <div class="card-name">{{ p.product_name|truncate(55) }}</div>
     <div class="card-meta">
       <span class="price">₹{{ '%.0f'|format(p.price) }}</span>

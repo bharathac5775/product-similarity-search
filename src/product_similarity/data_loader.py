@@ -75,6 +75,34 @@ def _colour_set(value) -> frozenset[str]:
     return frozenset(p for p in parts if p)
 
 
+def _infer_missing_brands(names: pd.Series, brands: pd.Series) -> pd.Series:
+    """Fill empty brands from the product name.
+
+    ~27% of rows have no brand in the source data, yet the brand is usually the
+    leading word(s) of the name (e.g. "Puma Men's T-Shirt"). We first learn the
+    set of brands that ARE present, then for each empty brand pick the *longest*
+    known brand the name starts with; if none matches, fall back to the name's
+    first word. Names/brands are already lowercased when this is called.
+    """
+    known = {b for b in brands if b}
+    # Longest brands first so "peter england" wins over "peter".
+    known_sorted = sorted(known, key=lambda b: len(b), reverse=True)
+
+    def infer(name: str) -> str:
+        for b in known_sorted:
+            # Match on a word boundary so "max" doesn't match "maximus".
+            if name == b or name.startswith(b + " "):
+                return b
+        first = name.split()
+        return first[0] if first else ""
+
+    return pd.Series(
+        [b if b else infer(n) for n, b in zip(names, brands)],
+        index=brands.index,
+    )
+
+
+
 def load_products(path: str) -> pd.DataFrame:
     """Load the .ldjson at ``path`` into a cleaned DataFrame indexed by uniq_id."""
     raw = pd.read_json(path, lines=True)
@@ -89,6 +117,9 @@ def load_products(path: str) -> pd.DataFrame:
         df["brand"] = raw["brand"].fillna("").astype(str).str.strip().str.lower().values
     else:
         df["brand"] = ""
+
+    # Recover missing brands from the product name (see _infer_missing_brands).
+    df["brand"] = _infer_missing_brands(df["product_name"], df["brand"]).values
 
     if "colour" in raw:
         df["colour_set"] = raw["colour"].apply(_colour_set).values
