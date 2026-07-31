@@ -36,12 +36,17 @@ class SimilarityEngine:
         eng.build(load_products(path))
         return eng
 
-    def _build_image_block(self, df) -> np.ndarray | None:
-        """Embed a sample of product images into a weighted dense block.
+    def _build_image_index(self, df) -> None:
+        """Embed a sample of product images into a separate reverse-image index.
+
+        This index is used ONLY by :meth:`find_similar_by_image_vector` (photo
+        upload search). It is deliberately NOT fused into ``self.matrix``, so that
+        click-similarity stays a pure text/attribute ranking — a product's picture
+        never contaminates "similar products".
 
         Only the first ``image_sample_size`` products are embedded (startup speed +
         dead-URL tolerance). Products outside the sample or with unreachable images
-        keep a zero image vector, so text/numeric signals still rank them.
+        keep a zero image vector and are skipped at query time.
         """
         s = self.settings
         if self._image_embedder is None:
@@ -58,7 +63,7 @@ class SimilarityEngine:
         block = np.zeros((n, dim), dtype="float32")
         block[:sample] = sample_vecs
 
-        # Keep the RAW image vectors (row-normalised) so reverse-image search can
+        # Store the RAW image vectors (row-normalised) so reverse-image search can
         # compare an uploaded photo against them directly. Rows with no image
         # (outside the sample / dead URL) stay all-zero and are skipped at query.
         norms = np.linalg.norm(block, axis=1, keepdims=True)
@@ -66,14 +71,16 @@ class SimilarityEngine:
             block, norms, out=np.zeros_like(block), where=norms > 0
         )
 
-        return block * s.w_image
-
     def build(self, df) -> None:
         self.df = df
         self._fb = FeatureBuilder(self.settings)
 
-        image_block = self._build_image_block(df) if self.settings.use_images else None
-        self.matrix = self._fb.fit_transform(df, image_block=image_block)
+        # Click-similarity matrix is ALWAYS text + numeric only. Images are kept in
+        # a separate index (see _build_image_index) for photo-upload search, so they
+        # never alter the "similar products" ranking.
+        self.matrix = self._fb.fit_transform(df, image_block=None)
+        if self.settings.use_images:
+            self._build_image_index(df)
 
         self._ids = list(df.index)
         self._pos = {pid: i for i, pid in enumerate(self._ids)}
