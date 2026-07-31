@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: product-similarity
+  labels:
+    app: product-similarity
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: product-similarity
+  template:
+    metadata:
+      labels:
+        app: product-similarity
+    spec:
+      containers:
+        - name: product-similarity
+          image: product-similarity:latest
+          # Use the locally built image (loaded into minikube), never pull from a registry.
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # Readiness: don't send traffic until the engine has loaded the dataset.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          # Liveness: restart the pod if it becomes unresponsive.
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 40
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1536Mi"

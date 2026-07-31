@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: product-similarity
+  labels:
+    app: product-similarity
+spec:
+  # NodePort exposes the service on the minikube node so we can reach it locally.
+  type: NodePort
+  selector:
+    app: product-similarity
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
