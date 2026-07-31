@@ -1,10 +1,33 @@
+# ---- Build context excludes (keeps the image small & clean) ----
+
+# Python / virtualenv / caches
 .venv/
 venv/
 __pycache__/
 *.pyc
+*.pyo
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Version control & CI
 .git/
+.gitignore
+.github/
+
+# Local docs & notes (not needed at runtime)
 docs/
-tests/
 *.md
+
+# Tests are not shipped in the runtime image
+tests/
+
+# macOS / editor junk
+.DS_Store
+**/.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Dataset archive — we ship the extracted .ldjson, not the zip
 data/archive.zip

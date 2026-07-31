@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: product-similarity-config
+  labels:
+    app: product-similarity
+# Runtime configuration for the engine. Change behaviour WITHOUT rebuilding the
+# image — edit here and `kubectl apply`, then restart the deployment.
+data:
+  # Path to the dataset baked into the image.
+  PSS_DATA_PATH: "data/marketing_sample_for_amazon_com-amazon_fashion_products__20200201_20200430__30k_data.ldjson"
+  # Text backend for product names.
+  PSS_TEXT_BACKEND: "tfidf"
+  # Approximate nearest-neighbour (FAISS HNSW). Off by default; exact cosine is
+  # plenty fast at 30k rows. Set to "1" to enable.
+  PSS_USE_FAISS: "0"
+  # CLIP image fusion. Off by default (needs the heavy optional deps + network
+  # for 2020 image URLs). Set to "1" only on an image built with those extras.
+  PSS_USE_IMAGES: "0"
+  # TF-IDF vocabulary cap.
+  PSS_TFIDF_MAX_FEATURES: "5000"

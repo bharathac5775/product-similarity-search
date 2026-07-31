@@ -5,11 +5,14 @@ metadata:
   labels:
     app: product-similarity
 spec:
-  # NodePort exposes the service on the minikube node so we can reach it locally.
+  # NodePort exposes the service on the minikube node so we can reach it locally
+  # at a STABLE, documented port (30080) rather than a random one.
   type: NodePort
   selector:
     app: product-similarity
   ports:
-    - port: 8000
-      targetPort: 8000
+    - name: http
+      port: 8000
+      targetPort: http
+      nodePort: 30080
       protocol: TCP

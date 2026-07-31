@@ -14,31 +14,64 @@ spec:
       labels:
         app: product-similarity
     spec:
+      # Pod-level hardening: run as the non-root user baked into the image.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: product-similarity
           image: product-similarity:latest
           # Use the locally built image (loaded into minikube), never pull from a registry.
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 8000
-          # Readiness: don't send traffic until the engine has loaded the dataset.
+            - name: http
+              containerPort: 8000
+          # Inject the PSS_* engine settings from the ConfigMap (no rebuild to retune).
+          envFrom:
+            - configMapRef:
+                name: product-similarity-config
+          # Startup probe: the engine builds ~30k vectors and can take ~15s (more
+          # with FAISS/images). This gates liveness/readiness so a slow first
+          # load never triggers a restart loop. Allows up to 30 * 5s = 150s.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          # Readiness: only receive traffic once /health responds.
           readinessProbe:
             httpGet:
               path: /health
-              port: 8000
-            initialDelaySeconds: 20
+              port: http
             periodSeconds: 10
-          # Liveness: restart the pod if it becomes unresponsive.
+          # Liveness: restart the pod if it becomes unresponsive (post-startup).
           livenessProbe:
             httpGet:
               path: /health
-              port: 8000
-            initialDelaySeconds: 40
+              port: http
             periodSeconds: 20
+          # Sized from a measured ~1.24 GiB peak RSS at startup (TF-IDF, 30k rows).
+          # Request comfortably above that; limit leaves headroom for FAISS.
           resources:
             requests:
-              cpu: "250m"
-              memory: "512Mi"
+              cpu: "500m"
+              memory: "1Gi"
             limits:
-              cpu: "1"
-              memory: "1536Mi"
+              cpu: "1500m"
+              memory: "2Gi"
+          # Container hardening.
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # uvicorn / Python need a writable tmp when the root fs is read-only.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
