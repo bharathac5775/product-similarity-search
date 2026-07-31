@@ -38,17 +38,37 @@ class ImageEmbedder:
             self._model = SentenceTransformer(self.model_name)
         return self._model
 
+    def _open(self, data: bytes):
+        """Decode raw image bytes into a PIL RGB image; None on any failure."""
+        try:
+            from PIL import Image
+
+            return Image.open(io.BytesIO(data)).convert("RGB")
+        except Exception:
+            return None
+
     def _fetch(self, url: str):
         """Download a URL into a PIL image; return None on any failure."""
         try:
             import requests
-            from PIL import Image
 
             resp = requests.get(url, timeout=5)
             resp.raise_for_status()
-            return Image.open(io.BytesIO(resp.content)).convert("RGB")
+            return self._open(resp.content)
         except Exception:
             return None
+
+    def embed_image(self, data: bytes):
+        """Embed raw uploaded image bytes into a single (dim,) vector.
+
+        Returns None if the bytes can't be decoded (so callers can show a
+        friendly error rather than crash). Used by the photo-upload search.
+        """
+        img = self._open(data)
+        if img is None:
+            return None
+        vec = self._model_lazy().encode([img], convert_to_numpy=True)
+        return np.asarray(vec[0], dtype="float32")
 
     def embed_urls(self, urls: list[str]) -> np.ndarray:
         """Embed a list of image URLs into an (n, dim) matrix.

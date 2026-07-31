@@ -3,6 +3,15 @@
 {% block title %}Fashion Finder — browse products{% endblock %}
 
 {% block content %}
+  <form class="photo-search" action="/search_by_image" method="post" enctype="multipart/form-data">
+    <div class="photo-search-text">
+      <strong>Search by photo</strong>
+      <span class="muted">Upload an image and find visually similar products.</span>
+    </div>
+    <input type="file" name="file" accept="image/*" required>
+    <button type="submit">Find by image</button>
+  </form>
+
   <div class="results-head">
     {% if q %}
       <h1>Results for “{{ q }}”</h1>

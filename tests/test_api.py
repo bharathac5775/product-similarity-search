@@ -68,6 +68,54 @@ def test_product_detail_unknown_id_404(sample_ldjson_path):
     assert "text/html" in r.headers["content-type"]
 
 
+def test_search_by_image_returns_results(sample_ldjson_path):
+    # Build an images-ON engine with a fake embedder (no torch/network).
+    import numpy as np
+    from product_similarity.config import Settings
+    from product_similarity.data_loader import load_products
+
+    df = load_products(sample_ldjson_path)
+    n = len(df)
+    dim = 8
+    vecs = np.eye(n, dim, dtype="float32")
+
+    class FakeEmbedder:
+        def __init__(self, v):
+            self._v = v.astype("float32")
+
+        def embed_urls(self, urls):
+            return self._v[: len(urls)]
+
+        def embed_image(self, data):
+            # pretend the uploaded photo matches product row 2
+            return self._v[2]
+
+    eng = SimilarityEngine(Settings(use_images=True, image_sample_size=n), image_embedder=FakeEmbedder(vecs))
+    eng.build(df)
+    c = TestClient(build_app(eng))
+
+    r = c.post(
+        "/search_by_image",
+        files={"file": ("photo.png", b"fake-image-bytes", "image/png")},
+    )
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
+    # the matching product (row 2) should be linked in the results
+    target_pid = list(df.index)[2]
+    assert f"/product/{target_pid}" in r.text
+
+
+def test_search_by_image_when_images_off_is_friendly(sample_ldjson_path):
+    # Fixture engine has images OFF -> should not 500; returns a clear message.
+    c = _client(sample_ldjson_path)
+    r = c.post(
+        "/search_by_image",
+        files={"file": ("photo.png", b"fake-image-bytes", "image/png")},
+    )
+    assert r.status_code in (200, 503)
+    assert "image" in r.text.lower()
+
+
 def test_find_unknown_id_404(sample_ldjson_path):
     c = _client(sample_ldjson_path)
     r = c.get("/find_similar_products", params={"product_id": "nope", "num_similar": 3})

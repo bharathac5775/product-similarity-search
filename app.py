@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -72,6 +72,55 @@ def _register_routes(app: FastAPI) -> None:
             request,
             "product.html",
             {"product": rows[0], "similar": eng.get_products(similar_ids)},
+        )
+
+    @app.post("/search_by_image", response_class=HTMLResponse)
+    async def search_by_image(request: Request, file: UploadFile = File(...)):
+        """Reverse-image search: upload a photo, get visually similar products.
+
+        Embeds the uploaded image with the SAME CLIP model used for products,
+        then finds nearest products by image cosine similarity. Requires the app
+        to run with images enabled (PSS_USE_IMAGES=1); otherwise returns a clear
+        message instead of crashing.
+        """
+        eng: SimilarityEngine = app.state.engine
+        data = await file.read()
+
+        # Reuse the engine's embedder if it built one; else make one on demand.
+        embedder = getattr(eng, "_image_embedder", None)
+        if embedder is None:
+            from product_similarity.images import ImageEmbedder
+
+            embedder = ImageEmbedder()
+
+        def results_page(title, products, note=""):
+            return _TEMPLATES.TemplateResponse(
+                request,
+                "image_results.html",
+                {"title": title, "products": products, "note": note},
+            )
+
+        try:
+            vec = embedder.embed_image(data)
+        except Exception:
+            vec = None
+        if vec is None:
+            return results_page(
+                "Could not read that image",
+                [],
+                "The uploaded file could not be decoded as an image. Try a JPG or PNG.",
+            )
+
+        try:
+            ids = eng.find_similar_by_image_vector(vec, NUM_SIMILAR)
+        except RuntimeError as exc:
+            # images are off
+            return results_page("Image search unavailable", [], str(exc))
+        except ValueError as exc:
+            return results_page("Image search error", [], str(exc))
+
+        return results_page(
+            "Products matching your photo", eng.get_products(ids)
         )
 
     @app.get("/find_similar_products")

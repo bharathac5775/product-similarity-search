@@ -28,6 +28,7 @@ class SimilarityEngine:
         self._pos: dict[str, int] = {}  # uniq_id -> row index
         self._ids: list[str] = []  # row index -> uniq_id
         self._fb: FeatureBuilder | None = None
+        self._image_vectors = None  # (n, dim) row-normalised, for reverse-image search
 
     @classmethod
     def from_path(cls, path: str, settings: Settings | None = None) -> "SimilarityEngine":
@@ -56,6 +57,15 @@ class SimilarityEngine:
         dim = sample_vecs.shape[1]
         block = np.zeros((n, dim), dtype="float32")
         block[:sample] = sample_vecs
+
+        # Keep the RAW image vectors (row-normalised) so reverse-image search can
+        # compare an uploaded photo against them directly. Rows with no image
+        # (outside the sample / dead URL) stay all-zero and are skipped at query.
+        norms = np.linalg.norm(block, axis=1, keepdims=True)
+        self._image_vectors = np.divide(
+            block, norms, out=np.zeros_like(block), where=norms > 0
+        )
+
         return block * s.w_image
 
     def build(self, df) -> None:
@@ -137,6 +147,39 @@ class SimilarityEngine:
 
         candidates.sort(reverse=True)
         return [pid for _, _, _, pid in candidates[:num_similar]]
+
+    def find_similar_by_image_vector(self, vec, num_similar: int) -> list[str]:
+        """Reverse-image search: given a CLIP image vector, return nearest products.
+
+        Compares the (normalised) query vector against the stored product image
+        vectors by cosine similarity. Products with no image vector (outside the
+        embedded sample or with a dead URL) are skipped. Requires images ON.
+        """
+        if num_similar <= 0:
+            raise ValueError("num_similar must be a positive integer")
+        if self._image_vectors is None:
+            raise RuntimeError(
+                "image search is unavailable: start the app with PSS_USE_IMAGES=1"
+            )
+
+        q = np.asarray(vec, dtype="float32").ravel()
+        norm = np.linalg.norm(q)
+        if norm == 0:
+            raise ValueError("query image produced an empty vector")
+        q = q / norm
+
+        scores = self._image_vectors @ q  # cosine (both sides normalised)
+        # Only rank products that actually have an image vector (non-zero row).
+        has_image = np.linalg.norm(self._image_vectors, axis=1) > 0
+        order = np.argsort(-scores)
+        out = []
+        for j in order:
+            if not has_image[j]:
+                continue
+            out.append(self._ids[j])
+            if len(out) >= num_similar:
+                break
+        return out
 
     # ------------------------------------------------------------------
     # Display helpers used by the storefront HTML pages (pure df lookups).

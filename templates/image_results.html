@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_card.html" import product_card %}
+{% block title %}{{ title }} — Fashion Finder{% endblock %}
+
+{% block content %}
+  <nav class="crumbs"><a href="/">Home</a> <span>/</span> <span>Search by photo</span></nav>
+  <div class="results-head">
+    <h1>{{ title }}</h1>
+    {% if note %}<p class="muted">{{ note }}</p>{% endif %}
+    {% if products %}<p class="muted">Ranked by visual similarity (CLIP image embeddings).</p>{% endif %}
+  </div>
+
+  {% if products %}
+    <section class="grid">
+      {% for p in products %}{{ product_card(p) }}{% endfor %}
+    </section>
+  {% elif not note %}
+    <div class="empty"><h2>No matches found</h2></div>
+  {% endif %}
+
+  <p style="margin-top:28px"><a class="buy-btn inline" href="/">← Back to home</a></p>
+{% endblock %}
