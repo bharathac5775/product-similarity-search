@@ -1,0 +1,17 @@
+"""Tests for configuration defaults and environment overrides."""
+from product_similarity.config import Settings, settings
+
+
+def test_defaults():
+    assert settings.text_backend == "tfidf"
+    assert settings.use_faiss is False
+    # Data-driven ordering: text dominant, price medium, rating low.
+    assert settings.w_text >= settings.w_price >= settings.w_rating
+
+
+def test_env_override(monkeypatch):
+    monkeypatch.setenv("PSS_USE_FAISS", "true")
+    monkeypatch.setenv("PSS_TEXT_BACKEND", "embeddings")
+    s = Settings.from_env()
+    assert s.use_faiss is True
+    assert s.text_backend == "embeddings"
