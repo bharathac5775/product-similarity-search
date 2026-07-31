@@ -3,8 +3,8 @@
 A microservice that, given a product's `uniq_id`, returns the *N* most similar
 products from the Amazon Fashion 2020 dataset (~30,000 items). It exposes a
 FastAPI endpoint, ships as a lean multi-stage Docker image, deploys to Kubernetes,
-offers an optional **FAISS/HNSW** fast path for large-scale search, and an optional
-**CLIP** image-similarity phase.
+offers an opt-in **FAISS/HNSW** fast path for large-scale search, and opt-in
+**multimodal CLIP** image similarity.
 
 > This document explains not just *how* to run the project, but *why* each design
 > decision was made — the reasoning and trade-offs behind the approach.
@@ -18,7 +18,7 @@ offers an optional **FAISS/HNSW** fast path for large-scale search, and an optio
 3. [How we measure similarity](#3-how-we-measure-similarity)
 4. [Architecture](#4-architecture)
 5. [Fast large-scale search: FAISS / HNSW](#5-fast-large-scale-search-faiss--hnsw)
-6. [Optional: CLIP image similarity (multimodal)](#6-optional-clip-image-similarity-multimodal)
+6. [Multimodal image similarity (CLIP)](#6-multimodal-image-similarity-clip)
 7. [How to run](#7-how-to-run) — local, Docker, Kubernetes
 8. [Testing](#8-testing)
 9. [Configuration](#9-configuration)
@@ -148,7 +148,7 @@ Layered, single-purpose modules:
 | `features.py` | build fused, L2-normalized vectors |
 | `engine.py` | `SimilarityEngine` + `find_similar_products` |
 | `faiss_index.py` | FAISS HNSW wrapper (fast large-scale search) |
-| `images.py` | CLIP image embeddings (optional) |
+| `images.py` | CLIP image embeddings (opt-in, fused) |
 | `app.py` | FastAPI service |
 
 ---
@@ -186,7 +186,7 @@ Code: `src/product_similarity/faiss_index.py`.
 
 ---
 
-## 6. Optional: CLIP image similarity (multimodal)
+## 6. Multimodal image similarity (CLIP)
 
 Products carry image URLs. To compare *how products look*, we embed images with a
 pretrained **CLIP** model (`clip-ViT-B-32`) into 512-dim vectors — this is *transfer

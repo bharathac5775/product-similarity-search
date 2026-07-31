@@ -1,4 +1,4 @@
-"""Optional CLIP image embeddings (last, self-contained phase).
+"""CLIP image embeddings for multimodal similarity (opt-in via PSS_USE_IMAGES).
 
 Turns product images into vectors using a pretrained CLIP model
 (``clip-ViT-B-32`` via ``sentence-transformers``). Visually similar products get
