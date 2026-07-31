@@ -49,8 +49,14 @@ class FeatureBuilder:
         tfidf = self.vectorizer.fit_transform(df["product_name"].tolist())
         return tfidf * s.w_text
 
-    def fit_transform(self, df):
-        numeric = csr_matrix(self._numeric_block(df))
-        text = self._text_block(df)
-        fused = hstack([numeric, text]).tocsr()
+    def fit_transform(self, df, image_block=None):
+        """Build the fused, L2-normalised matrix.
+
+        ``image_block`` is an optional dense (n, d) array of already-weighted image
+        features (see the engine). When given, it is stacked on as a third block.
+        """
+        blocks = [csr_matrix(self._numeric_block(df)), self._text_block(df)]
+        if image_block is not None:
+            blocks.append(csr_matrix(image_block))
+        fused = hstack(blocks).tocsr()
         return normalize(fused, norm="l2", axis=1)

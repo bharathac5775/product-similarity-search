@@ -33,11 +33,16 @@ class Settings:
     w_weight: float = 0.2
     w_brand: float = 0.4
     w_colour: float = 0.3
+    w_image: float = 0.6
 
     # Feature flags.
     text_backend: str = "tfidf"  # "tfidf" | "embeddings"
     use_faiss: bool = False
+    use_images: bool = False
     tfidf_max_features: int = 5000
+    # Number of products (from the top of the dataset) whose images are embedded
+    # when use_images is on. Keeps startup fast and tolerant of dead 2020 URLs.
+    image_sample_size: int = 1000
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -47,8 +52,12 @@ class Settings:
             data_path=os.getenv("PSS_DATA_PATH", base.data_path),
             text_backend=os.getenv("PSS_TEXT_BACKEND", base.text_backend),
             use_faiss=_as_bool(os.getenv("PSS_USE_FAISS", str(base.use_faiss))),
+            use_images=_as_bool(os.getenv("PSS_USE_IMAGES", str(base.use_images))),
             tfidf_max_features=int(
                 os.getenv("PSS_TFIDF_MAX_FEATURES", base.tfidf_max_features)
+            ),
+            image_sample_size=int(
+                os.getenv("PSS_IMAGE_SAMPLE_SIZE", base.image_sample_size)
             ),
         )
 

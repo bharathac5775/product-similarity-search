@@ -19,8 +19,10 @@ from .features import FeatureBuilder
 
 
 class SimilarityEngine:
-    def __init__(self, settings: Settings | None = None):
+    def __init__(self, settings: Settings | None = None, image_embedder=None):
         self.settings = settings or default_settings
+        # Optional injected embedder (real one is lazy-created; tests pass a fake).
+        self._image_embedder = image_embedder
         self.df = None
         self.matrix = None
         self._pos: dict[str, int] = {}  # uniq_id -> row index
@@ -33,10 +35,36 @@ class SimilarityEngine:
         eng.build(load_products(path))
         return eng
 
+    def _build_image_block(self, df) -> np.ndarray | None:
+        """Embed a sample of product images into a weighted dense block.
+
+        Only the first ``image_sample_size`` products are embedded (startup speed +
+        dead-URL tolerance). Products outside the sample or with unreachable images
+        keep a zero image vector, so text/numeric signals still rank them.
+        """
+        s = self.settings
+        if self._image_embedder is None:
+            from .images import ImageEmbedder
+
+            self._image_embedder = ImageEmbedder()
+
+        n = len(df)
+        sample = min(s.image_sample_size, n)
+        urls = df["image_url"].tolist()
+
+        sample_vecs = self._image_embedder.embed_urls(urls[:sample])
+        dim = sample_vecs.shape[1]
+        block = np.zeros((n, dim), dtype="float32")
+        block[:sample] = sample_vecs
+        return block * s.w_image
+
     def build(self, df) -> None:
         self.df = df
         self._fb = FeatureBuilder(self.settings)
-        self.matrix = self._fb.fit_transform(df)
+
+        image_block = self._build_image_block(df) if self.settings.use_images else None
+        self.matrix = self._fb.fit_transform(df, image_block=image_block)
+
         self._ids = list(df.index)
         self._pos = {pid: i for i, pid in enumerate(self._ids)}
 
