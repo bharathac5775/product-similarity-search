@@ -8,7 +8,7 @@ server-rendered storefront, a lean multi-stage Docker image, and Kubernetes
 manifests. Two ML capabilities are opt-in: an **approximate-nearest-neighbour** fast
 path (**FAISS/HNSW**) and **multimodal visual search** with **CLIP** image embeddings.
 
-> This document explains not just *how* to run the project, but *why* each modelling
+> This document explains not just about the project, but *why* each modelling
 > decision was made — the reasoning and trade-offs behind the approach.
 
 ---
